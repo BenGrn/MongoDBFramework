@@ -1,4 +1,5 @@
-﻿using MongoDB.Bson;
+﻿using Microsoft.Extensions.Configuration;
+using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using MongoDBFramework.Contracts;
@@ -11,9 +12,15 @@ namespace MongoDBFramework.Repository
     { 
         private readonly IMongoCollection<BsonDocument> _collection;
 
-        public MongoGenericRepository(IMongoCollection<BsonDocument> collection)
+        public MongoGenericRepository(IMongoClient client, IConfiguration configuration)
         {
-            this._collection = collection;
+            var collectionName = configuration[$"MongoGenericRepo:{nameof(T)}:Collection"];
+            var databaseName = configuration[$"MongoGenericRepo:{nameof(T)}:Database"];
+            if (collectionName is null || databaseName is null) 
+            { 
+                throw new ArgumentNullException($"Config for {nameof(MongoGenericRepository<T>)}"); 
+            }
+            this._collection = client.GetDatabase(databaseName).GetCollection<BsonDocument>(collectionName);
         }
         public async Task AddAsync(T entity)
         {
