@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
@@ -11,16 +12,20 @@ namespace MongoDBFramework.Repository
     public class MongoGenericRepository<T> : IMongoGenericRepository<T> where T : IMongoObject
     { 
         private readonly IMongoCollection<BsonDocument> _collection;
+        private readonly ILogger<MongoGenericRepository<T>> _logger;
 
-        public MongoGenericRepository(IMongoClient client, IConfiguration configuration)
+        public MongoGenericRepository(IMongoClient client, IConfiguration configuration, ILogger<MongoGenericRepository<T>> logger)
         {
-            var collectionName = configuration[$"MongoGenericRepo:{nameof(T)}:Collection"];
-            var databaseName = configuration[$"MongoGenericRepo:{nameof(T)}:Database"];
+            _logger = logger;
+            var collectionName = configuration[$"MongoGenericRepo:{typeof(T).Name}:Collection"];
+            var databaseName = configuration[$"MongoGenericRepo:{typeof(T).Name}:Database"];
+
             if (collectionName is null || databaseName is null) 
             { 
-                throw new ArgumentNullException($"Config for {nameof(MongoGenericRepository<T>)}"); 
+                throw new ArgumentNullException($"Config for {typeof(MongoGenericRepository<T>).Name}"); 
             }
             this._collection = client.GetDatabase(databaseName).GetCollection<BsonDocument>(collectionName);
+            
         }
         public async Task AddAsync(T entity)
         {
@@ -64,6 +69,19 @@ namespace MongoDBFramework.Repository
             return results;
         }
 
+        public async Task<List<T>> GetAllAsync(BsonDocument query)
+        {
+            var records = await _collection.FindAsync(query);
+            var results = new List<T>();
+
+            foreach (var document in records.ToList())
+            {
+                results.Add(BsonSerializer.Deserialize<T>(document));
+            }
+
+            return results;
+        }
+
         public async Task<List<T>> GetAllAsync(string key, object value)
         {
             var filter = Builders<BsonDocument>.Filter.Eq(key, value);
@@ -86,6 +104,19 @@ namespace MongoDBFramework.Repository
             if (result is null)
             {
                 throw new MongoNotFoundException(nameof(IMongoObject), entity);
+            }
+
+            return BsonSerializer.Deserialize<T>(result);
+        }
+
+        public async Task<T> GetAsync(BsonDocument query)
+        {
+            var records = await _collection.FindAsync(query);
+            var result = records.FirstOrDefault();
+
+            if (result is null)
+            {
+                throw new MongoNotFoundException(nameof(IMongoObject), query);
             }
 
             return BsonSerializer.Deserialize<T>(result);
